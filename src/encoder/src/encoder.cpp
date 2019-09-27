@@ -26,7 +26,7 @@ int main(int argc, char **argv)
   //publish
   while (ros::ok())
   {
-    srv.request.cmd = "r\n";
+    srv.request.cmd = "e\r";
     if(client.call(srv)){
       for(int i = 0;i<srv.response.reply.length();++i){
         if(srv.response.reply[i] == '|'){

@@ -7,7 +7,7 @@
 #define MOTOR_SPEED_L  'k' //'10'
 #define MOTOR_SPEED_R  'l' //'10'
 #define MOTOR_SPEEDS   'm' //'m 10 10'
-//#define PING           'p' //'p'
+#define PING           'p' //'p'
 #define RESET_ENCODERS 'r' //'r'
 #define UPDATE_PID_L   'a' //
 #define UPDATE_PID_R   'b'

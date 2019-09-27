@@ -39,6 +39,7 @@ int main(int argc,char** argv)
         // std::cout<<"----------------------"<<std::endl;
         if(t.type != EV_KEY){continue;}
         if(t.code == 30){
+            ROS_INFO("qqq");
             if(t.value == 2){continue;}
             if(t.value == 0)
                 {com.request.cmd = "k 0\r";}
