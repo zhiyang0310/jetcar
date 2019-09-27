@@ -30,9 +30,9 @@ int main(int argc, char **argv)
     if(client.call(srv)){
       for(int i = 0;i<srv.response.reply.length();++i){
         if(srv.response.reply[i] == '|'){
+          msg.header.stamp = ros::Time::now();
           msg.left_ticks = atol(srv.response.reply.substr(0,i).c_str());
           msg.right_ticks = atol(srv.response.reply.substr(i+1).c_str());
-          msg.stamp = ros::Time::now();
           pub.publish(msg);
           break;
         }

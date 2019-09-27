@@ -30,8 +30,8 @@ int main(int argc, char **argv)
   for (auto i = 0; i < 30; ++i) pipe.wait_for_frames();
 
   //define two pointer to get rgb and depth image from camera
-  uint8_t *p;
-  uint16_t *q;
+  uint8_t *p;  //hold rgb
+  uint16_t *q; //hold depth
 
   //define node name
   ros::init(argc, argv, "camera");
@@ -77,26 +77,30 @@ int main(int argc, char **argv)
     }
 
     //stamp image time
-    rgb_msg.stamp = ros::Time::now();
-    depth_msg.stamp = ros::Time::now();
+    rgb_msg.header.stamp = ros::Time::now();
+    depth_msg.header.stamp = ros::Time::now();
 
     //prepare to publish
     rgb_msg.height = aligned_color_frame.as<rs2::video_frame>().get_height();
     rgb_msg.width = aligned_color_frame.as<rs2::video_frame>().get_width();
     p = (uint8_t*)aligned_color_frame.get_data(); 
     for(int i = 0;i<rgb_msg.height*rgb_msg.width;++i){
-        rgb_msg.data[i] = *(p + i);
+        rgb_msg.data.push_back(*(p + i));
     }
 
     depth_msg.height = aligned_depth_frame.as<rs2::video_frame>().get_height();
     depth_msg.width = aligned_depth_frame.as<rs2::video_frame>().get_width();
     q = (uint16_t*)aligned_depth_frame.get_data(); 
     for(int i = 0;i<depth_msg.height*depth_msg.width;++i){
-        depth_msg.data[i] = *(q + i);
+        depth_msg.data.push_back(*(q + i));
     }
-
+    
     rgb_pub.publish(rgb_msg);
     depth_pub.publish(depth_msg);
+
+    //clear previous data
+    rgb_msg.data.clear();
+    depth_msg.data.clear();
 
     //Sleep to match the publish rate
     loop_rate.sleep();
