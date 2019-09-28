@@ -9,13 +9,17 @@ project(odometry)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  message_generation
+  sensor_msgs
   roscpp
   std_msgs
+  cv_bridge
+  message_filters
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+#find_package(Boost REQUIRED COMPONENTS system)
+find_package(OpenCV REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -48,11 +52,10 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+   FILES
+   encoder.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -69,10 +72,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   geometry_msgs#   std_msgs
-# )
+ generate_messages(
+   DEPENDENCIES
+   std_msgs
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -106,8 +109,8 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES odometry
-#  CATKIN_DEPENDS geometry_msgs message_generation roscpp std_msgs
-#  DEPENDS system_lib
+  CATKIN_DEPENDS geometry_msgs roscpp std_msgs cv_bridge message_filters sensor_msgs encoder message_generation 
+  DEPENDS OpenCV
 )
 
 ###########
@@ -119,6 +122,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -198,3 +202,16 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+add_executable(odometry src/odometry.cpp)
+
+add_dependencies(odometry ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(odometry ${catkin_LIBRARIES})
+target_link_libraries(odometry ${OpenCV_LIBS})
+
+## Mark executables and/or libraries for installation
+install(TARGETS odometry 
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
