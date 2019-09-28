@@ -1,10 +1,18 @@
 #include <ros/ros.h>
 #include <librealsense2/rs.hpp>
-#include <camera/rgb.h>
-#include <camera/depth.h>
+#include <opencv2/core/core.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Image.h>
 
-#define depth_max 5.0
+// #include <iostream>
+// #include <opencv2/highgui/highgui.hpp>  
+// #include <opencv2/imgproc/imgproc.hpp>
+
+#define depth_max 10.0
 #define depth_min 0.5
+#define image_height 480
+#define image_width 640
 
 bool profile_changed(const std::vector<rs2::stream_profile>& current, const std::vector<rs2::stream_profile>& prev);
 float get_depth_scale(rs2::device dev);
@@ -15,8 +23,8 @@ int main(int argc, char **argv)
   //set camera parameters
   rs2::pipeline pipe;
   rs2::config pipe_config;
-  pipe_config.enable_stream(RS2_STREAM_COLOR,640,480,RS2_FORMAT_BGR8,30);
-  pipe_config.enable_stream(RS2_STREAM_DEPTH,640,480,RS2_FORMAT_Z16,30);
+  pipe_config.enable_stream(RS2_STREAM_COLOR,image_width,image_height,RS2_FORMAT_BGR8,30);
+  pipe_config.enable_stream(RS2_STREAM_DEPTH,image_width,image_height,RS2_FORMAT_Z16,30);
   rs2::pipeline_profile profile = pipe.start();
 
   //obtain depth_scale
@@ -29,9 +37,15 @@ int main(int argc, char **argv)
   //a few seconds to settle the whiteblance
   for (auto i = 0; i < 30; ++i) pipe.wait_for_frames();
 
-  //define two pointer to get rgb and depth image from camera
-  uint8_t *p;  //hold rgb
-  uint16_t *q; //hold depth
+  //define two cv::Mat to get rgb and depth image from camera
+  cv::Mat aligned_depth_image, aligned_color_image;
+  //convert cv::Mat into two CvImageptr
+  cv_bridge::CvImagePtr color_image, depth_image;
+  color_image = boost::make_shared< cv_bridge::CvImage >();
+  depth_image = boost::make_shared< cv_bridge::CvImage >();
+  //define info
+  color_image->encoding = sensor_msgs::image_encodings::RGB8;
+  depth_image->encoding = sensor_msgs::image_encodings::MONO16;
 
   //define node name
   ros::init(argc, argv, "camera");
@@ -39,13 +53,13 @@ int main(int argc, char **argv)
   //initial node
   ros::NodeHandle nh;
 
-  //define msg
-  camera::rgb rgb_msg;
-  camera::depth depth_msg;
+  //define messages
+  sensor_msgs::Image color_msg;
+  sensor_msgs::Image depth_msg;
 
   //create publisher
-  ros::Publisher rgb_pub = nh.advertise<camera::rgb>("camera_rgb", 50);
-  ros::Publisher depth_pub = nh.advertise<camera::depth>("camera_depth", 50);
+  ros::Publisher color_pub = nh.advertise<sensor_msgs::Image>("camera_color", 50);
+  ros::Publisher depth_pub = nh.advertise<sensor_msgs::Image>("camera_depth", 50);
 
   //define the publish rate
   ros::Rate loop_rate(30.0);
@@ -76,31 +90,29 @@ int main(int argc, char **argv)
         continue;
     }
 
-    //stamp image time
-    rgb_msg.header.stamp = ros::Time::now();
-    depth_msg.header.stamp = ros::Time::now();
-
-    //prepare to publish
-    rgb_msg.height = aligned_color_frame.as<rs2::video_frame>().get_height();
-    rgb_msg.width = aligned_color_frame.as<rs2::video_frame>().get_width();
-    p = (uint8_t*)aligned_color_frame.get_data(); 
-    for(int i = 0;i<rgb_msg.height*rgb_msg.width;++i){
-        rgb_msg.data.push_back(*(p + i));
-    }
-
-    depth_msg.height = aligned_depth_frame.as<rs2::video_frame>().get_height();
-    depth_msg.width = aligned_depth_frame.as<rs2::video_frame>().get_width();
-    q = (uint16_t*)aligned_depth_frame.get_data(); 
-    for(int i = 0;i<depth_msg.height*depth_msg.width;++i){
-        depth_msg.data.push_back(*(q + i));
-    }
+    //stamp time
+    color_image->header.stamp = ros::Time::now();
+    depth_image->header.stamp = ros::Time::now();
+    //hold the images
+    aligned_depth_image = cv::Mat(cv::Size(image_width,image_height),CV_16UC1,(void*)aligned_depth_frame.get_data(),cv::Mat::AUTO_STEP);
+    aligned_color_image = cv::Mat(cv::Size(image_width,image_height),CV_8UC3,(void*)aligned_color_frame.get_data(),cv::Mat::AUTO_STEP);
+    color_image->image = aligned_color_image;
+    depth_image->image = aligned_depth_image;
     
-    rgb_pub.publish(rgb_msg);
-    depth_pub.publish(depth_msg);
+    ///////////////////////////// see the images ///////////////////////////////////
+    // std::cout<<depth_image->toImageMsg()->header.stamp<<std::endl;
+    // std::cout<<depth_image->toImageMsg()->encoding<<std::endl;
+    // std::cout<<depth_image->toImageMsg()->height<<std::endl;
+    // std::cout<<depth_scale<<std::endl;
+    // imwrite("./1.jpg", aligned_color_image);
+    // imwrite("./2.jpg", 255*aligned_depth_image/10000);
+    // imwrite("./3.jpg", 255*cv::Mat(cv::Size(image_width,image_height),CV_16UC1,(void*)frameset.get_data(),cv::Mat::AUTO_STEP)/10000);
+    // break;
+    //////////////////////////////////////////////////////////////////////////////////
 
-    //clear previous data
-    rgb_msg.data.clear();
-    depth_msg.data.clear();
+    //publish
+    color_pub.publish(color_image->toImageMsg());
+    depth_pub.publish(depth_image->toImageMsg());
 
     //Sleep to match the publish rate
     loop_rate.sleep();
