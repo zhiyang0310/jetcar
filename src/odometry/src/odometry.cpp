@@ -1,6 +1,15 @@
 #include <ros/ros.h>
-#include <opencv2/core/core.hpp>
-#include <opencv2/core/cuda.hpp>
+#include <opencv2/opencv.hpp>
+#include "opencv2/core/core.hpp"
+#include "opencv2/core/cuda.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/core/cuda_stream_accessor.hpp"
+#include "opencv2/cudafeatures2d.hpp"
+#include "opencv2/cudaimgproc.hpp"
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/cudafilters.hpp"
+#include "opencv2/cudawarping.hpp"
+
 #include <cv_bridge/cv_bridge.h>
 //message_filter
 #include <message_filters/subscriber.h>
@@ -10,11 +19,15 @@
 #include <sensor_msgs/Image.h>
 #include <nav_msgs/Odometry.h>
 
-#define depth_max 10.0
-#define depth_min 0.5
+#include <vector>
 
+#define depth_max 10000.0
+#define depth_min 500.0
+
+using namespace cv;
+using namespace cuda;
 using namespace sensor_msgs;
-using namespace geometry_msgs;
+using namespace nav_msgs;
 using namespace encoder;  //message defined by customer must claim the namespace when used?
 using namespace message_filters;
 
@@ -47,6 +60,24 @@ using namespace message_filters;
 //       float64 y
 //       float64 z
 //   float64[36] covariance
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static bool first = true;
+static cv::cuda::GpuMat pre_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0)),
+                        cur_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0));
+static long pre_left_ticks = 0, pre_right_ticks = 0;
+static cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
+static cv::cuda::GpuMat pre_image_gpu, cur_image_gpu;
+static cv::cuda::GpuMat pre_depth_gpu, cur_depth_gpu;
+static cv::cuda::GpuMat pre_mask_gpu, cur_mask_gpu;
+
+//define ORB detector and matcher
+static cv::Ptr<cv::cuda::orb> ORB = cv::cuda::ORB::create(500, 1.2f, 6, 31, 0, 2, 0, 31, 20,true);
+static cv::Ptr<cv::cuda::DescriptorMatcher> matcher = cv::cuda::DescriptorMatcher::createBFMatcher(NORM_HAMMING);
+static std::vector<cv::DMatch> matches, good_matches;
+//define keypoints and descriptions
+static cv::cuda::GpuMat pre_keypoints, cur_keypoints;
+static cv::cuda::GpuMat pre_descriptions, cur_descriptions;
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //define messages//
 ros::Time pre_time = ros::Time::now();
@@ -56,24 +87,58 @@ bool semaphore = true;
 
 void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image, const encoder::encoderConstPtr& encoder)
 {
-  static bool first = true;
-  static cv::cuda::GpuMat pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,Scalar(0));
-  static long pre_left_ticks = 0, pre_right_ticks = 0;
-  cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
-  static cv::cuda::GpuMat pre_image_gpu, cur_image_gpu;
-  static cv::cuda::GpuMat pre_depth_gpu, cur_image_gpu;
 
   if(first){
     color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
     depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
     pre_image_gpu.upload(color_image_bridge->image);
     pre_depth_gpu.upload(depth_image_bridge->image);
+    ///////////////////////////////////////////////////////////////////
+    cv::cuda::threshold(pre_depth_gpu, pre_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB -> detectAndComputeAsync(pre_image_gpu, pre_mask_gpu, pre_keypoints, pre_descriptions);
     ROS_INFO("Odometry: Initialize done.");
     first = false;
     return;
   }
   if(semaphore == false){
-    cur_time = ros::Time::now();
+    // upload images
+    color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
+    depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
+    cur_image_gpu.upload(color_image_bridge->image);
+    cur_depth_gpu.upload(depth_image_bridge->image);
+    ///////////////////////////////////////////////////////////////
+    cv::cuda::threshold(cur_depth_gpu, cur_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB -> detectAndComputeAsync(cur_image_gpu, cur_mask_gpu, cur_keypoints, cur_descriptions);
+    //match features
+    matcher->match(pre_descriptions, cur_descriptions, matches);
+    
+    int sz = matches.size();
+		double max_dist = 0; double min_dist = 100;
+ 
+		for (int i = 0; i < sz; ++i)
+		{
+			double dist = matches[i].distance;
+			if (dist < min_dist) min_dist = dist;
+			if (dist > max_dist) max_dist = dist;
+		}
+ 
+		for (int i = 0; i < sz; ++i)
+		{
+			if (matches[i].distance < 2*min_dist)
+			{
+				good_matches.push_back(matches[i]);
+			}
+		}
+
+
+
+
+
+
+
+
+
+
 
 
   }
