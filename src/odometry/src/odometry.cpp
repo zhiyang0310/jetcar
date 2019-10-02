@@ -8,7 +8,7 @@
 //msgs
 #include <encoder/encoder.h>
 #include <sensor_msgs/Image.h>
-#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Odometry.h>
 
 #define depth_max 10.0
 #define depth_min 0.5
@@ -18,33 +18,65 @@ using namespace geometry_msgs;
 using namespace encoder;  //message defined by customer must claim the namespace when used?
 using namespace message_filters;
 
-//PoseStamped message: 
+//Odometry message: 
 // std_msgs/Header header
 //   uint32 seq
 //   time stamp
 //   string frame_id
-// geometry_msgs/Pose pose
-//   geometry_msgs/Point position
-//     float64 x
-//     float64 y
-//     float64 z
-//   geometry_msgs/Quaternion orientation
-//     float64 x
-//     float64 y
-//     float64 z
-//     float64 w
+// string child_frame_id
+// geometry_msgs/PoseWithCovariance pose
+//   geometry_msgs/Pose pose
+//     geometry_msgs/Point position
+//       float64 x
+//       float64 y
+//       float64 z
+//     geometry_msgs/Quaternion orientation
+//       float64 x
+//       float64 y
+//       float64 z
+//       float64 w
+//   float64[36] covariance
+// geometry_msgs/TwistWithCovariance twist
+//   geometry_msgs/Twist twist
+//     geometry_msgs/Vector3 linear
+//       float64 x
+//       float64 y
+//       float64 z
+//     geometry_msgs/Vector3 angular
+//       float64 x
+//       float64 y
+//       float64 z
+//   float64[36] covariance
 
 //define messages//
-encoder::encoder pre_encoder_msg;
-Image pre_color_im, pre_depth_im;
-PoseStamped pre_pose_msg, cur_pose_msg;
+ros::Time pre_time = ros::Time::now();
+Odometry msg;
 //odometry semaphore and flag
-bool semaphore = true, first_time = true;
+bool semaphore = true;
 
 void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image, const encoder::encoderConstPtr& encoder)
 {
-  // Solve all of perception here...
-  pre_pose_msg.pose.position.x = 0;
+  static bool first = true;
+  static cv::cuda::GpuMat pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,Scalar(0));
+  static long pre_left_ticks = 0, pre_right_ticks = 0;
+  cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
+  static cv::cuda::GpuMat pre_image_gpu, cur_image_gpu;
+  static cv::cuda::GpuMat pre_depth_gpu, cur_image_gpu;
+
+  if(first){
+    color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
+    depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
+    pre_image_gpu.upload(color_image_bridge->image);
+    pre_depth_gpu.upload(depth_image_bridge->image);
+    ROS_INFO("Odometry: Initialize done.");
+    first = false;
+    return;
+  }
+  if(semaphore == false){
+    cur_time = ros::Time::now();
+
+
+  }
 }
 
 int main(int argc, char **argv)
