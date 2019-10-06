@@ -9,8 +9,6 @@
 // #include <opencv2/highgui/highgui.hpp>  
 // #include <opencv2/imgproc/imgproc.hpp>
 
-#define depth_max 10.0
-#define depth_min 0.5
 #define image_height 480
 #define image_width 640
 
@@ -23,12 +21,12 @@ int main(int argc, char **argv)
   //set camera parameters
   rs2::pipeline pipe;
   rs2::config pipe_config;
-  pipe_config.enable_stream(RS2_STREAM_COLOR,image_width,image_height,RS2_FORMAT_BGR8,30);
+  pipe_config.enable_stream(RS2_STREAM_COLOR,image_width,image_height,RS2_FORMAT_RGB8,30);
   pipe_config.enable_stream(RS2_STREAM_DEPTH,image_width,image_height,RS2_FORMAT_Z16,30);
   rs2::pipeline_profile profile = pipe.start();
 
-  //obtain depth_scale
-  float depth_scale = get_depth_scale(profile.get_device());
+//   //obtain depth_scale
+//   float depth_scale = get_depth_scale(profile.get_device());
 
   //set the stream which we plan to align to
   rs2_stream align_to = RS2_STREAM_COLOR;
@@ -46,6 +44,7 @@ int main(int argc, char **argv)
   //define info
   color_image->encoding = sensor_msgs::image_encodings::RGB8;
   depth_image->encoding = sensor_msgs::image_encodings::MONO16;
+  ros::Time time_stamp;
 
   //define node name
   ros::init(argc, argv, "camera");
@@ -53,13 +52,21 @@ int main(int argc, char **argv)
   //initial node
   ros::NodeHandle nh;
 
-  //define messages
-  sensor_msgs::Image color_msg;
-  sensor_msgs::Image depth_msg;
+//   //define messages
+//   sensor_msgs::Image color_msg;
+//   sensor_msgs::Image depth_msg;
+
+//   ros::Time time_stamp;
+//   color_msg.height = image_height;
+//   depth_msg.height = image_height;
+//   color_msg.width = image_width;
+//   depth_msg.width = image_width;
+//   color_msg.encoding = sensor_msgs::image_encodings::RGB8;
+//   depth_msg.encoding = sensor_msgs::image_encodings::MONO16;
 
   //create publisher
-  ros::Publisher color_pub = nh.advertise<sensor_msgs::Image>("camera_color", 50);
-  ros::Publisher depth_pub = nh.advertise<sensor_msgs::Image>("camera_depth", 50);
+  ros::Publisher color_pub = nh.advertise<sensor_msgs::Image>("camera_color", 30);
+  ros::Publisher depth_pub = nh.advertise<sensor_msgs::Image>("camera_depth", 30);
 
   //define the publish rate
   ros::Rate loop_rate(30.0);
@@ -68,14 +75,14 @@ int main(int argc, char **argv)
   while (ros::ok())
   {
     rs2::frameset frameset = pipe.wait_for_frames();
-    if (profile_changed(pipe.get_active_profile().get_streams(), profile.get_streams()))
-    {
-        //If the profile was changed, update the align object, and also get the new device's depth scale
-        profile = pipe.get_active_profile();
-        align_to = find_stream_to_align(profile.get_streams());
-        align = rs2::align(align_to);
-        depth_scale = get_depth_scale(profile.get_device());
-    }
+    // if (profile_changed(pipe.get_active_profile().get_streams(), profile.get_streams()))
+    // {
+    //     //If the profile was changed, update the align object, and also get the new device's depth scale
+    //     profile = pipe.get_active_profile();
+    //     align_to = find_stream_to_align(profile.get_streams());
+    //     align = rs2::align(align_to);
+    //     depth_scale = get_depth_scale(profile.get_device());
+    // }
 
     //Get processed aligned frame
     auto processed = align.process(frameset);
@@ -90,9 +97,23 @@ int main(int argc, char **argv)
         continue;
     }
 
+    // time_stamp = ros::Time::now();
+    // color_msg.header.stamp = time_stamp;
+    // depth_msg.header.stamp = time_stamp;
+    // uint8_t *ptr1 = (uint8_t*)aligned_color_frame.get_data();
+    // uint16_t *ptr2 = (uint16_t*)aligned_depth_frame.get_data();
+
+    // for(int i = 0; i<pixel_num; ++i){
+    //     color_msg.data.push_back(*(ptr1+i));
+    // }
+    // for(int i = 0; i<pixel_num/3; ++i){
+    //     depth_msg.data.push_back(*(ptr2+i));
+    // }
+
     //stamp time
-    color_image->header.stamp = ros::Time::now();
-    depth_image->header.stamp = ros::Time::now();
+    time_stamp = ros::Time::now();
+    color_image->header.stamp = time_stamp;
+    depth_image->header.stamp = time_stamp;
     //hold the images
     aligned_depth_image = cv::Mat(cv::Size(image_width,image_height),CV_16UC1,(void*)aligned_depth_frame.get_data(),cv::Mat::AUTO_STEP);
     aligned_color_image = cv::Mat(cv::Size(image_width,image_height),CV_8UC3,(void*)aligned_color_frame.get_data(),cv::Mat::AUTO_STEP);
@@ -113,6 +134,12 @@ int main(int argc, char **argv)
     //publish
     color_pub.publish(color_image->toImageMsg());
     depth_pub.publish(depth_image->toImageMsg());
+
+    // color_pub.publish(color_msg);
+    // depth_pub.publish(depth_msg);
+
+    // color_msg.data.clear();
+    // depth_msg.data.clear();
 
     //Sleep to match the publish rate
     loop_rate.sleep();

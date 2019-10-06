@@ -1,3 +1,4 @@
+#include <stdlib>
 #include <ros/ros.h>
 #include <opencv2/opencv.hpp>
 #include "opencv2/core/core.hpp"
@@ -11,6 +12,9 @@
 #include "opencv2/cudawarping.hpp"
 
 #include <cv_bridge/cv_bridge.h>
+
+#include <cblas.h>
+#include "../include/matrix_compute.h"
 //message_filter
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -21,8 +25,11 @@
 
 #include <vector>
 
-#define depth_max 10000.0
-#define depth_min 500.0
+#define depth_max         10000.0
+#define depth_min         500.0
+#define length_per_tick 
+#define d                 0.155
+#define point_num         50
 
 using namespace cv;
 using namespace cuda;
@@ -61,10 +68,10 @@ using namespace message_filters;
 //       float64 z
 //   float64[36] covariance
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-static bool first = true;
 static cv::cuda::GpuMat pre_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0)),
                         cur_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0));
-static long pre_left_ticks = 0, pre_right_ticks = 0;
+static long pre_left_ticks = 0, pre_right_ticks = 0, delta_left_ticks = 0, delta_right_ticks = 0;
+static float s = 0, s_left = 0, s_right = 0, delta_x = 0, delta_y = 0, delta_theta = 0;
 static cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
 static cv::cuda::GpuMat pre_image_gpu, cur_image_gpu;
 static cv::cuda::GpuMat pre_depth_gpu, cur_depth_gpu;
@@ -77,31 +84,59 @@ static std::vector<cv::DMatch> matches, good_matches;
 //define keypoints and descriptions
 static cv::cuda::GpuMat pre_keypoints, cur_keypoints;
 static cv::cuda::GpuMat pre_descriptions, cur_descriptions;
+//kalman filter
+static float mu[3] = {0.0, 0.0, 0.0}, sigma[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 
+             sigma_inverse[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},  
+             G[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, H[3*2*point_num];
+static const float R[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 
+                   Q[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //define messages//
-ros::Time pre_time = ros::Time::now();
-Odometry msg;
+static ros::Time pre_time = ros::Time::now();
+static Odometry msg;
 //odometry semaphore and flag
-bool semaphore = true;
+static bool semaphore = true;
+static bool first = true;
 
-void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image, const encoder::encoderConstPtr& encoder)
-{
-
-  if(first){
-    color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
-    depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
-    pre_image_gpu.upload(color_image_bridge->image);
-    pre_depth_gpu.upload(depth_image_bridge->image);
-    ///////////////////////////////////////////////////////////////////
-    cv::cuda::threshold(pre_depth_gpu, pre_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
-    ORB -> detectAndComputeAsync(pre_image_gpu, pre_mask_gpu, pre_keypoints, pre_descriptions);
-    ROS_INFO("Odometry: Initialize done.");
-    first = false;
-    return;
+void encode_thread(const encoder::encoderConstPtr& encoder){
+  delta_left_ticks = encoder.left_ticks - pre_left_ticks;
+  delta_right_ticks = encoder.right_ticks - pre_right_ticks;
+  pre_left_ticks = encoder.left_ticks;
+  pre_right_ticks = encoder.right_ticks;
+  //s:
+  s_left = delta_left_ticks*lehgth_per_tick;
+  s_right = delta_right_ticks*lehgth_per_tick;
+  s = 0.5*(s_left + s_right);
+  //x,y:
+  delta_x = s*cos(mu[2]);
+  delta_y = s*sin(mu[2]);
+  mu[0] += delta_x;
+  mu[1] += delta_y;
+  //compute G
+  G[6] = -delta_y;
+  G[7] = delta_x;
+  //delta_theta:
+  delta_theta = (s_right - s_left)/d;
+  //update theta:
+  mu[2] += delta_theta;
+  //estimate covariance
+  strmm(G, sigma, CblasLeft, CblasUpper, CblasNoTrans, CblasUnit);
+  strmm(G, sigma, CblasRight, CblasUpper, CblasTrans, CblasUnit);
+  sigma[0] += R[0];sigma[4] += R[4];sigma[8] += R[8];
+  //compute sigma_inverse to implement Sherman/Morrison formula
+  for(int i = 0; i < 9; ++i){
+    sigma_inverse[i] = sigma[i];
   }
-  if(semaphore == false){
-    // upload images
+  if(matrix_inverse(sigma_inverse, 3)){
+    ROS_INFO("Odometry: Compute sigma_inverse failed, exit.");
+    exit(1);
+  }
+}
+
+void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_image){
+  // upload images
     color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
     depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
     cur_image_gpu.upload(color_image_bridge->image);
@@ -129,6 +164,27 @@ void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image
 				good_matches.push_back(matches[i]);
 			}
 		}
+    //
+}
+
+void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image, const encoder::encoderConstPtr& encoder)
+{
+
+  if(first){
+    color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
+    depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
+    pre_image_gpu.upload(color_image_bridge->image);
+    pre_depth_gpu.upload(depth_image_bridge->image);
+    ///////////////////////////////////////////////////////////////////
+    cv::cuda::threshold(pre_depth_gpu, pre_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB -> detectAndComputeAsync(pre_image_gpu, pre_mask_gpu, pre_keypoints, pre_descriptions);
+    ROS_INFO("Odometry: Initialize done.");
+    first = false;
+    return;
+  }
+  if(semaphore){
+    semaphore = false;
+    if(abs(encoder.left_ticks - pre_left_ticks)<5 && abs(encoder.right_ticks - pre_right_ticks)<5){return;}
 
 
 
@@ -142,6 +198,8 @@ void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image
 
 
   }
+  semaphore = true;
+  return;
 }
 
 int main(int argc, char **argv)
@@ -176,7 +234,7 @@ int main(int argc, char **argv)
   //TimeSynchronizer<Image, Image, encoder::encoder> sync(camera_color_sub, camera_depth_sub, encoder_sub, 50);
   sync.registerCallback(boost::bind(&callback, _1, _2, _3));
 
-  ros::AsyncSpinner spinner(4);
+  ros::AsyncSpinner spinner(3);
   spinner.start();
 
   //publish the pose message
