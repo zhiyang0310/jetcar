@@ -1,14 +1,37 @@
-# JetCar
-### Welcome to my project: JetCar, A slam car run on a Jetson Nano and a X86-64 PC. This project is mainly written with C/C++ for efficiency.
-## 1.Hardwares
-### 1.Jetson Nano
-### 2.Arduino Mega 2560
-### 3.Intel RealSense D435
-## 2.Softwares
-### 1.ROS Melodic
-### 2.OpenCV
-### 2.OpenBLAS
-### 3.CLAPACK
-### 4.cuBLAS
-### 5.CUDA Math Library
-## 3.Install
+## Welcome to GitHub Pages
+
+You can use the [editor on GitHub](https://github.com/zhiyang0310/github.io/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+
+Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+
+### Markdown
+
+Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+
+```markdown
+Syntax highlighted code block
+
+# Header 1
+## Header 2
+### Header 3
+
+- Bulleted
+- List
+
+1. Numbered
+2. List
+
+**Bold** and _Italic_ and `Code` text
+
+[Link](url) and ![Image](src)
+```
+
+For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
+
+### Jekyll Themes
+
+Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/zhiyang0310/github.io/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+
+### Support or Contact
+
+Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
