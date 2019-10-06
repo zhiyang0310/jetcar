@@ -1,4 +1,4 @@
-## Welcome to GitHub Pages
+# Welcome to JetCar
 
 You can use the [editor on GitHub](https://github.com/zhiyang0310/github.io/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
 
