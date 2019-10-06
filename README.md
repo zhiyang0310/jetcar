@@ -1,4 +1,5 @@
-# jetcar
+# JetCar
+### Welcome to my project: JetCar, A slam car run on a Jetson Nano and a X86-64 PC. This project is mainly written with C/C++ for efficiency.
 ## 1.Hardwares
 ### 1.Jetson Nano
 ### 2.Arduino Mega 2560
@@ -10,4 +11,4 @@
 ### 3.CLAPACK
 ### 4.cuBLAS
 ### 5.CUDA Math Library
-A car made with Arduino, jetson nano, and intel realsense camera.
+## 3.Install
