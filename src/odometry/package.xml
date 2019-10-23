@@ -7,7 +7,7 @@
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
   <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
-  <maintainer email="oliver@todo.todo">oliver</maintainer>
+  <maintainer email="zzy0310@live.cn">oliver</maintainer>
 
 
   <!-- One license tag required, multiple allowed, one license per tag -->
@@ -54,6 +54,7 @@
   <build_depend>cv_bridge</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>encoder</build_depend>
+  <build_depend>pose2DStamped</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>message_filters</build_depend>
   <build_depend>message_generation</build_depend>
@@ -63,6 +64,7 @@
   <build_export_depend>cv_bridge</build_export_depend>
   <build_export_depend>geometry_msgs</build_export_depend>
   <build_export_depend>encoder</build_export_depend>
+  <build_export_depend>pose2DStamped</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
   <build_export_depend>message_filters</build_export_depend>
   <build_export_depend>message_generation</build_export_depend>
@@ -72,6 +74,7 @@
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>encoder</exec_depend>
+  <exec_depend>pose2DStamped</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>message_filters</exec_depend>
   <exec_depend>message_generation</exec_depend>

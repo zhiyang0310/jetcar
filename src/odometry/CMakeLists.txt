@@ -19,7 +19,9 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 #find_package(Boost REQUIRED COMPONENTS system)
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 3.4 REQUIRED)
+set(CMAKE_MODULE_PATH /opt/OpenBLAS/lib/cmake/)
+find_package(OpenBLAS REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -55,6 +57,7 @@ find_package(OpenCV REQUIRED)
 add_message_files(
    FILES
    encoder.msg
+   pose2DStamped.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -75,6 +78,7 @@ add_message_files(
  generate_messages(
    DEPENDENCIES
    std_msgs
+   geometry_msgs
  )
 
 ################################################
@@ -109,8 +113,8 @@ add_message_files(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES odometry
-  CATKIN_DEPENDS geometry_msgs roscpp std_msgs cv_bridge message_filters sensor_msgs encoder message_generation 
-  DEPENDS OpenCV
+  CATKIN_DEPENDS geometry_msgs roscpp std_msgs cv_bridge message_filters sensor_msgs encoder pose2DStamped message_generation 
+  DEPENDS OpenCV OpenBLAS
 )
 
 ###########
@@ -123,6 +127,7 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${OpenBLAS_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -202,12 +207,13 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(odometry src/odometry.cpp)
+add_executable(odometry src/odometry.cpp src/matrix_compute.cpp)
 
 add_dependencies(odometry ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(odometry ${catkin_LIBRARIES})
 target_link_libraries(odometry ${OpenCV_LIBS})
+target_link_libraries(odometry ${OpenBLAS_LIBRARIES})
 
 ## Mark executables and/or libraries for installation
 install(TARGETS odometry 

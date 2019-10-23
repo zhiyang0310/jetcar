@@ -1,5 +1,5 @@
 #include <cblas.h>
-#include <f2c.h>
+//#include <f2c.h>
 
 //#include <cstdio>
 

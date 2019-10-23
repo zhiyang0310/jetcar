@@ -1,5 +1,4 @@
 //#include <stdlib>
-#include <vector>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -7,7 +6,14 @@
 #include <ros/ros.h>
 #include <opencv2/opencv.hpp>
 #include "opencv2/core/core.hpp"
+#include "opencv2/core/cuda.hpp"
 #include "opencv2/highgui/highgui.hpp"
+#include "opencv2/core/cuda_stream_accessor.hpp"
+#include "opencv2/cudafeatures2d.hpp"
+#include "opencv2/cudaimgproc.hpp"
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/cudafilters.hpp"
+#include "opencv2/cudawarping.hpp"
 
 #include <cv_bridge/cv_bridge.h>
 
@@ -30,27 +36,29 @@
 #define point_num         50
 
 using namespace cv;
-using namespace std;
+using namespace cuda;
 using namespace sensor_msgs;
 //using namespace nav_msgs;
 using namespace encoder;  //message defined by customer must claim the namespace when used?
 using namespace message_filters;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+static cv::cuda::GpuMat pre_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0)),
+                        cur_pose_gpu = cv::cuda::GpuMat(3,1,CV_32F,cv::Scalar(0));
 static long pre_left_ticks = 0, pre_right_ticks = 0, delta_left_ticks = 0, delta_right_ticks = 0;
 static float s = 0, s_left = 0, s_right = 0, delta_x = 0, delta_y = 0, delta_theta = 0;
 static cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
-static cv::Mat pre_image, cur_image;
-static cv::Mat pre_depth, cur_depth;
-static cv::Mat pre_mask, cur_mask;
+static cv::cuda::GpuMat pre_image_gpu, cur_image_gpu;
+static cv::cuda::GpuMat pre_depth_gpu, cur_depth_gpu;
+static cv::cuda::GpuMat pre_mask_gpu, cur_mask_gpu;
 
 //define ORB detector and matcher
-static cv::Ptr<cv::ORB> ORB_operator = cv::ORB::create(500, 1.2f, 6, 31, 0, 2);
-static cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(NORM_HAMMING);
+static cv::Ptr<cv::cuda::ORB> ORB_operator = cv::cuda::ORB::create(500, 1.2f, 6, 31, 0, 2, 0, 31, 20,true);
+static cv::Ptr<cv::cuda::DescriptorMatcher> matcher = cv::cuda::DescriptorMatcher::createBFMatcher(NORM_HAMMING);
 static std::vector<cv::DMatch> matches, good_matches;
 //define keypoints and descriptions
-static vector<cv::KeyPoint> pre_keypoints, cur_keypoints;
-static cv::Mat pre_descriptions, cur_descriptions;
+static cv::cuda::GpuMat pre_keypoints, cur_keypoints;
+static cv::cuda::GpuMat pre_descriptions, cur_descriptions;
 //kalman filter
 static float mu[3] = {0.0, 0.0, 0.0}, sigma[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 
              sigma_inverse[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},  
@@ -111,11 +119,11 @@ void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_
   // upload images
     color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
     depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
-    cur_image = color_image_bridge->image;
-    cur_depth = depth_image_bridge->image;
+    cur_image_gpu.upload(color_image_bridge->image);
+    cur_depth_gpu.upload(depth_image_bridge->image);
     ///////////////////////////////////////////////////////////////
-    cv::threshold(cur_depth, cur_mask, depth_min, depth_max, CV_THRESH_BINARY);
-    ORB_operator -> detectAndCompute(cur_image, cur_mask, cur_keypoints, cur_descriptions);
+    cv::cuda::threshold(cur_depth_gpu, cur_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB_operator -> detectAndComputeAsync(cur_image_gpu, cur_mask_gpu, cur_keypoints, cur_descriptions);
     //match features
     matcher->match(pre_descriptions, cur_descriptions, matches);
     
@@ -156,11 +164,11 @@ void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image
   if(first){
     color_image_bridge = cv_bridge::toCvShare(color_image, "bgr8");
     depth_image_bridge = cv_bridge::toCvShare(depth_image, "mono16");
-    cur_image = color_image_bridge->image;
-    cur_depth = depth_image_bridge->image;
+    pre_image_gpu.upload(color_image_bridge->image);
+    pre_depth_gpu.upload(depth_image_bridge->image);
     ///////////////////////////////////////////////////////////////////
-    cv::threshold(pre_depth, pre_mask, depth_min, depth_max, CV_THRESH_BINARY);
-    ORB_operator -> detectAndCompute(pre_image, pre_mask, pre_keypoints, pre_descriptions);
+    cv::cuda::threshold(pre_depth_gpu, pre_mask_gpu, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB_operator -> detectAndComputeAsync(pre_image_gpu, pre_mask_gpu, pre_keypoints, pre_descriptions);
     ROS_INFO("Odometry: Initialize done.");
     first = false;
     return;

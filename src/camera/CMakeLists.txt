@@ -15,7 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 find_package(realsense2 REQUIRED)
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 3.4 REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -207,7 +207,7 @@ add_executable(camera src/camera.cpp)
 add_dependencies(camera ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(camera ${catkin_LIBRARIES})
-target_link_libraries(camera realsense2 ${OpenCV_LIBS})
+target_link_libraries(camera ${realsense2_LIBRARY} ${OpenCV_LIBS})
 
 ## Mark executables and/or libraries for installation
 install(TARGETS camera 
