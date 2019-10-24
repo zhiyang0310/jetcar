@@ -27,7 +27,7 @@
 #define depth_min         500.0
 #define length_per_tick        10.0
 #define d                 0.155
-#define point_num         50
+#define point_num         30
 
 using namespace cv;
 using namespace std;
@@ -52,13 +52,12 @@ static std::vector<cv::DMatch> matches, good_matches;
 static vector<cv::KeyPoint> pre_keypoints, cur_keypoints;
 static cv::Mat pre_descriptions, cur_descriptions;
 //kalman filter
-static float mu[3] = {0.0, 0.0, 0.0}, sigma[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 
-             sigma_inverse[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},  
-             G[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, H_transpose[3*2*point_num];
-static const float R[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 
-                   Q[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},
-                   K[9] = {},
-                   K_inverse[9] = {};
+static float mu[3] = {0.0, 0.0, 0.0}, sigma[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},  
+             G[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, H_transpose[3*3*point_num],
+             K[3*3*point_num], C[3*3] = {0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0}, d[3*1],
+             Q[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, z_compute[3*point_num],
+             z_observe[3*point_num];
+static const float R[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -97,14 +96,19 @@ void encode_thread(const encoder::encoderConstPtr& encoder){
   strmm(G, sigma, CblasLeft, CblasUpper, CblasNoTrans, CblasUnit);
   strmm(G, sigma, CblasRight, CblasUpper, CblasTrans, CblasUnit);
   sigma[0] += R[0];sigma[4] += R[4];sigma[8] += R[8];
-  //compute sigma_inverse to implement Sherman/Morrison formula
-  for(int i = 0; i < 9; ++i){
-    sigma_inverse[i] = sigma[i];
-  }
-  if(matrix_inverse(sigma_inverse, 3)){
-    ROS_INFO("Odometry: Compute sigma_inverse failed, exit.");
-    exit(1);
-  }
+  //prepare matrix C and vector d
+  //C:
+  C[2] = -((sin(delta_theta))/fx);
+  C[8] = (cx*sin(delta_theta))/fx;
+  C[0] = cos(delta_theta) + C[2]*cx;
+  C[1] = C[2]*cy;
+  C[6] = fx*sin(delta_theta) + cx*C[8];
+  C[8] += cos(delta_theta);
+  C[7] = cy*C[8] - cy;
+  //d:
+  d[2] = delta_x*sin(mu[2]) - delta_y*cos(mu[2]);
+  d[1] = cy*d[2];
+  d[0] = -fx*( delta_x*cos(mu[2]) + delta_y*sin(mu[2]) ) + cx*d[2];
 }
 
 void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_image){
@@ -140,7 +144,10 @@ void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_
 }
 
 void compute_H_transpose(){
-  
+  auto u, v, z;
+  for(int i = 0; i < point_num; ++i){
+    
+  }
 }
 
 void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image, const encoder::encoderConstPtr& encoder, const ros::Publisher& pub)
@@ -170,9 +177,14 @@ void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image
   if(abs(delta_left_ticks)<5 && abs(delta_right_ticks)<5){return;}
   else{
     //run threads
-    std::thread t1(camera_thread, color_image, depth_image);
-    encode_thread(encoder);
+    std::thread t1(encode_thread, encoder);
+    camera_thread(color_image, depth_image);
+    //compute H_transpose:
+
+
     t1.join();
+
+    
 
 
 
