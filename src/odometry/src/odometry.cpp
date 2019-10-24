@@ -42,7 +42,7 @@ static float s = 0, s_left = 0, s_right = 0, delta_x = 0, delta_y = 0, delta_the
 static cv_bridge::CvImageConstPtr color_image_bridge, depth_image_bridge;
 static cv::Mat pre_image, cur_image;
 static cv::Mat pre_depth, cur_depth;
-static cv::Mat pre_mask, cur_mask;
+static cv::Mat mask;
 
 //define ORB detector and matcher
 static cv::Ptr<cv::ORB> ORB_operator = cv::ORB::create(500, 1.2f, 6, 31, 0, 2);
@@ -55,7 +55,7 @@ static cv::Mat pre_descriptions, cur_descriptions;
 static float mu[3] = {0.0, 0.0, 0.0}, sigma[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},  
              G[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, H_transpose[3*3*point_num],
              K[3*3*point_num], C[3*3] = {0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0}, d[3*1],
-             Q[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, z_compute[3*point_num],
+             Q[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, z_pre[3*point_num], z_compute[3*point_num],
              z_observe[3*point_num];
 static const float R[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 
@@ -118,13 +118,13 @@ void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_
     cur_image = color_image_bridge->image;
     cur_depth = depth_image_bridge->image;
     ///////////////////////////////////////////////////////////////
-    cv::threshold(cur_depth, cur_mask, depth_min, depth_max, CV_THRESH_BINARY);
-    ORB_operator -> detectAndCompute(cur_image, cur_mask, cur_keypoints, cur_descriptions);
+    cv::threshold(cur_depth, mask, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB_operator -> detectAndCompute(cur_image, mask, cur_keypoints, cur_descriptions);
     //match features
     matcher->match(pre_descriptions, cur_descriptions, matches);
     
     int sz = matches.size();
-		double max_dist = 0; double min_dist = 100;
+		double max_dist = 0; double min_dist = 10000;
  
 		for (int i = 0; i < sz; ++i)
 		{
@@ -144,9 +144,31 @@ void camera_thread(const ImageConstPtr& color_image, const ImageConstPtr& depth_
 }
 
 void compute_H_transpose(){
-  auto u, v, z;
-  for(int i = 0; i < point_num; ++i){
+  auto up, vp, zp, uc, vc, zc;
+  auto iter = good_matches.begin();
+  int queryid, trainid;
+  auto pre_depth_ptr = pre_depth.ptr<uint16_t> (0),
+       cur_depth_ptr = cur_depth.ptr<uint16_t> (0);
+  if(good_matches.size()<point_num){ROS_INFO("match points lack!");exit(1);}
+  for(int i = 0; i < point_num; ++i, ++iter){
+    queryid = *iter.queryIdx;
+    trainid = *iter.trainIdx;
+    uc = cur_keypoints(good_matches[trainid]).pt.x;
+    vc = cur_keypoints(good_matches[trainid]).pt.y;
+    zc = (cur_depth.ptr<uint16_t> (vc))[uc];
+    up = pre_keypoints(good_matches[queryid]).pt.x;
+    vp = pre_keypoints(good_matches[queryid]).pt.y;
+    zp = (pre_depth.ptr<uint16_t> (vp))[up];
+    ///////////////////////////////////////////////////
+    z_pre[3*i] = up*zp;
+    z_pre[3*i + 1] = vp*zp;
+    z_pre[3*i + 2] = zp;
+    z_observe[3*i] = uc*zc;
+    z_observe[3*i + 1] = vc*zc;
+    z_observe[3*i + 2] = zc;
+    /////////////////////////////////////////////////
     
+
   }
 }
 
@@ -166,8 +188,8 @@ void callback(const ImageConstPtr& color_image, const ImageConstPtr& depth_image
     cur_image = color_image_bridge->image;
     cur_depth = depth_image_bridge->image;
     ///////////////////////////////////////////////////////////////////
-    cv::threshold(pre_depth, pre_mask, depth_min, depth_max, CV_THRESH_BINARY);
-    ORB_operator -> detectAndCompute(pre_image, pre_mask, pre_keypoints, pre_descriptions);
+    cv::threshold(pre_depth, mask, depth_min, depth_max, CV_THRESH_BINARY);
+    ORB_operator -> detectAndCompute(pre_image, mask, pre_keypoints, pre_descriptions);
     ROS_INFO("Odometry: Initialize done.");
     first = false;
     return;
